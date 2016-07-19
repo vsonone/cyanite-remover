@@ -127,7 +127,9 @@
 (defn- get-doc-id
   "Get a document ID."
   [tenant path]
-  (str tenant "_" path))
+  (str (if
+         (clojure.string/blank? tenant) path
+             (str tenant "_" path))))
 
 (defn- delete-impl
   "Delete implementation."

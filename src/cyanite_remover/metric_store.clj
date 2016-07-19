@@ -20,6 +20,9 @@
   (shutdown [this]))
 
 (def ^:const default-cassandra-keyspace "metric")
+(def ^:const default-cassandra-tableName "metric")
+(def ^:const default-cassandra-password nil)
+(def ^:const default-cassandra-user nil)
 (def ^:const default-cassandra-channel-size 10000)
 (def ^:const default-cassandra-batch-size 1000)
 (def ^:const default-cassandra-batch-rate nil)
@@ -32,24 +35,25 @@
        ~body)))
 
 (def ^:const fetch-cql
-  (str "SELECT data, time FROM metric WHERE "
+  (str "SELECT data, time FROM %s WHERE "
        "tenant = ? AND rollup = ? AND period = ? AND path = ? %s "
        "ORDER BY time %s"))
 
 (def ^:const delete-cql
-  (str "DELETE FROM metric WHERE "
+  (str "DELETE FROM %s WHERE "
        "tenant = ? AND rollup = ? AND period = ? AND path = ?"))
 
-(def ^:const fetch-cqls
+(defn- fetch-cqls
+  "Returns map of cqls wwith table name in it" [tablename]
   (let [comb (mcomb/selections [true false] 3)]
     (->> comb
-         (map #(format fetch-cql (str (if (nth % 0) " AND time >= ?" "")
+         (map #(format fetch-cql tablename (str (if (nth % 0) " AND time >= ?" "")
                                       (if (nth % 1) " AND time <= ?" ""))
                        (if (nth % 2) " LIMIT ?" "")))
          (zipmap comb))))
 
-(def ^:const delete-cqls {false delete-cql
-                          true (str delete-cql " AND time = ?")})
+(defn- delete-cqls [delete-cql-tableName] {false delete-cql-tableName
+                          true (str delete-cql-tableName " AND time = ?")})
 
 (defn- log-error
   "Log a error."
@@ -112,10 +116,10 @@
 
 (defn- get-delete-channel
   "Get delete channel."
-  [session chan-size batch-rate data-processed? run stats-errors]
+  [session chan-size batch-rate data-processed? run stats-errors tableName]
   (let [ch-in (async/chan chan-size)
         ch (if batch-rate (trtl/throttle-chan ch-in batch-rate :second) ch-in)
-        pcqls (prepare-cqls delete-cqls session)]
+        pcqls (prepare-cqls (delete-cqls (format delete-cql tableName)) session)]
     (go-while (not @data-processed?)
               (let [data (async/<! ch)]
                 (if data
@@ -149,13 +153,18 @@
   (log/info "Creating the metric store...")
   (let [run (:run options false)
         keyspace (:cassandra-keyspace options default-cassandra-keyspace)
+        cassandra-user (:cassandra-user options)
+        cassandra-password (:cassandra-password options)
+        cassandra-tablename (:cassandra-tablename options default-cassandra-tableName)
+        credentials (if (clojure.string/blank? cassandra-user) {} {:user cassandra-user :password cassandra-password})
         c-options (merge {:contact-points hosts}
                          default-cassandra-options
+                         {:credentials credentials}
                          (:cassandra-options options {}))
         _ (log/info "Cassandra options: " c-options)
         session (-> (alia/cluster c-options)
                     (alia/connect keyspace))
-        fetch-pcqls (prepare-cqls fetch-cqls session)
+        fetch-pcqls (prepare-cqls (fetch-cqls cassandra-tablename) session)
         chan-size (:cassandra-channel-size options default-cassandra-channel-size)
         batch-size (:cassandra-batch-size options default-cassandra-batch-size)
         batch-rate (:cassandra-batch-rate options default-cassandra-batch-rate)
@@ -163,7 +172,7 @@
         stats-processed (atom 0)
         stats-errors (atom 0)
         channel (get-delete-channel session chan-size batch-rate
-                                    delete-processed? run stats-errors)
+                                    delete-processed? run stats-errors cassandra-tablename)
         batch (atom [])]
     (log/info (str "The metric store has been created. "
                    "Keyspace: " keyspace ", "

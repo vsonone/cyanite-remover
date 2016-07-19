@@ -107,6 +107,7 @@
   (check-arguments "remove-metrics" arguments 5 5)
   (check-options command #{:from :to :run :exclude-paths :jobs :sort
                            :cassandra-keyspace :cassandra-options
+                           :cassandra-user :cassandra-password :cassandra-tablename
                            :cassandra-channel-size :cassandra-batch-size
                            :cassandra-batch-rate :elasticsearch-index
                            :elasticsearch-scroll-batch-size
@@ -141,6 +142,7 @@
   (check-arguments "remove-obsolete-data" arguments 5 5)
   (check-options command #{:threshold :run :exclude-paths :sort :jobs
                            :cassandra-keyspace :cassandra-options
+                           :cassandra-user :cassandra-password :cassandra-tablename
                            :cassandra-channel-size :cassandra-batch-size
                            :cassandra-batch-rate :elasticsearch-index
                            :elasticsearch-scroll-batch-size
@@ -173,6 +175,7 @@
   (check-arguments "list-metrics" arguments 5 5)
   (check-options command #{:from :to :exclude-paths :sort :cassandra-keyspace
                            :cassandra-options :elasticsearch-index
+                           :cassandra-user :cassandra-password :cassandra-tablename
                            :elasticsearch-scroll-batch-size
                            :elasticsearch-scroll-batch-rate}
                  options)
@@ -197,6 +200,7 @@
   (check-arguments "list-obsolete-data" arguments 5 5)
   (check-options command #{:threshold :exclude-paths :sort :jobs
                            :cassandra-keyspace :cassandra-options
+                           :cassandra-user :cassandra-password :cassandra-tablename
                            :elasticsearch-index :elasticsearch-scroll-batch-size
                            :elasticsearch-scroll-batch-rate}
                  options)
@@ -241,6 +245,12 @@
     :validate [#(< 0 %) "Must be a number > 0"]]
    [nil "--cassandra-keyspace KEYSPACE"
     (str "Cassandra keyspace. Default: " mstore/default-cassandra-keyspace)]
+   [nil "--cassandra-password PASSWORD"
+    (str "Cassandra Password. Default: " mstore/default-cassandra-password)]
+   [nil "--cassandra-user USER"
+    (str "Cassandra User. Default: " mstore/default-cassandra-user)]
+   [nil "--cassandra-tablename TABLENAME"
+    (str "Cassandra tablename. Default: " mstore/default-cassandra-tableName)]
    ["-O" "--cassandra-options OPTIONS"
     "Cassandra options. Example: \"{:compression :lz4}\""
     :parse-fn #(read-string %)
